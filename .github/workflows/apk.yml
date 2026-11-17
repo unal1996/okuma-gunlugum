@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
@@ -37,7 +37,13 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
+      - name: Ortamı kontrol et
+        run: |
+          {
+            echo "ANDROID_HOME=$ANDROID_HOME"
+            ls "$ANDROID_HOME" "$ANDROID_HOME/build-tools" "$ANDROID_HOME/platforms" 2>&1 | tail -n 30
+            node --version; java -version 2>&1 | head -1
+          } 2>&1 | tee -a "$RUNNER_TEMP/log.txt"
 
       - name: Paketleri kur
         run: |
@@ -96,6 +102,7 @@ jobs:
         run: |
           f="$RUNNER_TEMP/log.txt"
           [ -f "$f" ] || { echo "::error::Günlük yok (adım günlük yazmadan önce durdu)"; exit 0; }
+          echo "::error title=Ortam::$(head -n 12 "$f" | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
           msg=$(grep -iE "error|fail|what went wrong|exception|could not" "$f" | grep -v "^::" | tail -n 25 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
           echo "::error title=Önemli satırlar::${msg}"
           tail=$(tail -n 40 "$f" | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
