@@ -17,7 +17,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: İmza anahtarını kontrol et
         env:
@@ -28,11 +28,11 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -40,10 +40,14 @@ jobs:
       - uses: android-actions/setup-android@v3
 
       - name: Paketleri kur
-        run: npm ci || npm install
+        run: |
+          set -o pipefail
+          npm ci 2>&1 | tee -a "$RUNNER_TEMP/log.txt"
 
       - name: Android projesini oluştur
         run: |
+          set -o pipefail
+          exec > >(tee -a "$RUNNER_TEMP/log.txt") 2>&1
           ./scripts/prepare-www.sh
           npx cap add android
           npx capacitor-assets generate --android
@@ -56,13 +60,17 @@ jobs:
       - name: APK derle
         working-directory: android
         run: |
+          set -o pipefail
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon --console=plain 2>&1 | tee -a "$RUNNER_TEMP/log.txt"
 
       - name: APK'yı imzala
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
         run: |
+          set -o pipefail
+          exec > >(tee -a "$RUNNER_TEMP/log.txt") 2>&1
+          ls "$ANDROID_HOME/build-tools" || true
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           echo "$KEYSTORE_B64" | base64 -d > ks.p12
           "$BT/zipalign" -p -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
@@ -82,3 +90,13 @@ jobs:
             Değişiklik: ${{ github.event.head_commit.message }}
           files: OkumaGunlugum.apk
           make_latest: true
+
+      - name: Hata özeti
+        if: failure()
+        run: |
+          f="$RUNNER_TEMP/log.txt"
+          [ -f "$f" ] || { echo "::error::Günlük yok (adım günlük yazmadan önce durdu)"; exit 0; }
+          msg=$(grep -iE "error|fail|what went wrong|exception|could not" "$f" | grep -v "^::" | tail -n 25 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Önemli satırlar::${msg}"
+          tail=$(tail -n 40 "$f" | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Son satırlar::${tail}"
