@@ -1,0 +1,8 @@
+{
+  "appId": "com.unal1996.okumagunlugum",
+  "appName": "Okuma Günlüğüm",
+  "webDir": "www",
+  "android": {
+    "adjustMarginsForEdgeToEdge": "force"
+  }
+}

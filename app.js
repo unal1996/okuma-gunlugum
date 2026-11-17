@@ -73,6 +73,12 @@ const P = {
 };
 const icon = (n, s = 22, w = 1.8) => `<svg class="i" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
 
+/* ============ Android (Capacitor) ============ */
+const Cap = window.Capacitor;
+const isNative = !!(Cap && Cap.isNativePlatform && Cap.isNativePlatform());
+const plugins = {};
+const plug = n => plugins[n] || (plugins[n] = Cap && Cap.registerPlugin ? Cap.registerPlugin(n) : (Cap && Cap.Plugins && Cap.Plugins[n]));
+
 /* ============ Veri ============ */
 function defaults() {
   return { v: 1, profile: { name: '', dailyGoal: 40, yearGoal: 12, theme: 'system', onboarded: false, lastBackup: null }, books: {}, entries: [] };
@@ -214,6 +220,9 @@ function render() {
   const views = { home: viewHome, calendar: viewCalendar, books: viewBooks, notes: viewNotes, settings: viewSettings };
   $('#app').innerHTML = (views[ui.view] || viewHome)();
   renderNav();
+  if (ui.view === 'settings' && isNative) {
+    try { plug('App').getInfo().then(i => { const el = $('[data-ver]'); if (el) el.textContent = ` · Sürüm ${i.version}`; }).catch(() => {}); } catch (e) {}
+  }
 }
 function renderNav() {
   const items = [['home', 'home', 'Ana Sayfa'], ['calendar', 'calendar', 'Takvim'], ['books', 'book', 'Kitaplar'], ['notes', 'note', 'Notlar']];
@@ -488,7 +497,7 @@ function viewSettings() {
       <div class="set-row"><div><b>Yedekten geri yükle</b><div class="mute small">Mevcut verilerin yerine yedekteki gelir.</div></div><label class="btn sm ghost filebtn">${icon('upload', 18)}Dosya seç<input type="file" accept="application/json,.json" data-act-change="importData"></label></div>
       <div class="set-row"><div><b>Tüm verileri sil</b><div class="mute small">${booksArr().length} kitap, ${total} kayıt.</div></div><button class="btn sm danger" data-act="wipe">Sil</button></div>
     </div>
-    <p class="mute small" style="text-align:center">Okuma Günlüğüm · Veriler yalnızca bu cihazda saklanır.<br>Kitap arama: Google Books ve Open Library.</p>
+    <p class="mute small" style="text-align:center">Okuma Günlüğüm<span data-ver></span> · Veriler yalnızca bu cihazda saklanır.<br>Kitap arama: Google Books ve Open Library.</p>
   </div>`;
 }
 
@@ -1039,17 +1048,33 @@ function openTimer() {
 }
 
 /* ---------- Yedek ---------- */
-function exportData() {
+async function exportData() {
   const data = JSON.stringify({ app: 'okuma-gunlugum', exportedAt: new Date().toISOString(), ...S }, null, 1);
-  const blob = new Blob([data], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `okuma-gunlugum-yedek-${todayKey()}.json`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  const name = `okuma-gunlugum-yedek-${todayKey()}.json`;
+  if (isNative) {
+    try {
+      const r = await plug('Filesystem').writeFile({ path: name, data, directory: 'CACHE', encoding: 'utf8' });
+      try {
+        await plug('Share').share({ title: 'Okuma Günlüğüm yedeği', files: [r.uri], dialogTitle: 'Yedeği kaydet ya da gönder' });
+      } catch (e) {
+        if (!/cancel/i.test(String(e && e.message))) throw e;
+        return;
+      }
+    } catch (e) {
+      toast('Yedek oluşturulamadı');
+      return;
+    }
+  } else {
+    const blob = new Blob([data], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
   S.profile.lastBackup = todayKey();
   save(); render();
-  toast('Yedek dosyası indirildi');
+  toast(isNative ? 'Yedek hazır' : 'Yedek dosyası indirildi');
 }
 async function importData(file) {
   try {
@@ -1145,7 +1170,16 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && to
 /* ============ Başlat ============ */
 render();
 if (!S.profile.onboarded) onboarding();
-if ('serviceWorker' in navigator && location.protocol === 'https:') {
+if (isNative) {
+  try {
+    plug('App').addListener('backButton', () => {
+      if ($('#confirm').classList.contains('open')) { const bd = $('#confirm .backdrop'); if (bd) bd.click(); return; }
+      if ($('#sheet').classList.contains('open')) { if (S.profile.onboarded) closeSheet(); return; }
+      if (ui.view !== 'home') { ui.view = 'home'; render(); window.scrollTo(0, 0); return; }
+      plug('App').exitApp();
+    });
+  } catch (e) {}
+} else if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 })();

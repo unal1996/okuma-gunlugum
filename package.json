@@ -1,0 +1,17 @@
+{
+  "name": "okuma-gunlugum",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Okuma Günlüğüm — Android paketi (Capacitor)",
+  "dependencies": {
+    "@capacitor/android": "7.6.10",
+    "@capacitor/app": "7.1.2",
+    "@capacitor/core": "7.6.10",
+    "@capacitor/filesystem": "7.1.9",
+    "@capacitor/share": "7.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "4.0.0",
+    "@capacitor/cli": "7.6.10"
+  }
+}
